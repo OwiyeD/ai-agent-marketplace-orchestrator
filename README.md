@@ -48,7 +48,7 @@ Request Layer → Orchestrator Core → Agent Services → Aggregation → Deliv
 ### 1. Clone and Setup
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/OwiyeD/ai-agent-marketplace-orchestrator.git
 cd orchestrator_v1
 pip install -r requirements.txt
 ```
