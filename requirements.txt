@@ -1,0 +1,25 @@
+# Core FastAPI and Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Task Queue and Background Processing
+celery==5.3.4
+redis==4.6.0
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
+alembic==1.12.1
+
+# Data Validation and Settings
+pydantic==2.5.0
+pydantic-settings==2.0.3
+
+# HTTP Client
+httpx==0.25.2
+
+# Environment and Configuration
+python-dotenv==1.0.0
+
+# File Upload Support
+python-multipart==0.0.6
