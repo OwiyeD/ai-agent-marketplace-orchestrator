@@ -5,25 +5,40 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uuid
 
-from database import get_db, Orchestration, Agent, create_tables
-from tasks import orchestrate_workflow
+from prometheus_client import make_asgi_app
+import redis
+import os
+
+from src.orchastrator.config.database import get_db, Orchestration, Agent, create_tables
+from src.orchastrator.workers.tasks import orchestrate_workflow
 from config import settings
+
+from orchestrator.core import orchestrate_workflow, generate_workflow_visualization_data
+from orchestrator.metrics import TASK_COUNTER, TASK_DURATION
 
 # Create FastAPI app
 app = FastAPI(
     title="AI Agent Marketplace Orchestrator",
-    description="MVP for AI agent interoperability and workflow orchestration",
-    version="1.0.0"
+    description="Enhanced orchestration with monitoring and caching",
+    version="2.0.0"
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3001"],  # React frontend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add Prometheus metrics endpoint
+if os.getenv("ENABLE_METRICS", "true").lower() == "true":
+    metrics_app = make_asgi_app()
+    app.mount("/metrics", metrics_app)
+
+# Redis connection
+redis_client = redis.Redis.from_url(os.getenv("REDIS_CACHE_URL", "redis://localhost:6379/1"))
 
 # Pydantic models for API
 class UserRequest(BaseModel):
@@ -241,7 +256,7 @@ async def get_agent(
 @app.get("/workflows")
 async def get_workflow_definitions():
     """Get available workflow definitions"""
-    from tasks import WORKFLOW_DEFINITIONS
+    from src.orchastrator.workers.tasks import WORKFLOW_DEFINITIONS
     return WORKFLOW_DEFINITIONS
 
 # Demo endpoint for testing
@@ -301,6 +316,25 @@ async def demo_ecommerce_onboarding(
         "message": "Demo e-commerce onboarding workflow started",
         "orchestration_id": orchestration.id,
         "workflow_type": "ecommerce_onboarding"
+    }
+
+# NEW: Add workflow visualization endpoint
+@app.get("/workflow/{orchestration_id}/visualization")
+async def get_workflow_visualization(orchestration_id: str):
+    """Get workflow data for frontend visualization"""
+    result = generate_workflow_visualization_data.delay(orchestration_id)
+    return result.get(timeout=30)
+
+# NEW: Add cache statistics endpoint
+@app.get("/cache/stats")
+async def get_cache_stats():
+    """Get cache performance statistics"""
+    info = redis_client.info()
+    return {
+        "cache_hits": info.get("keyspace_hits", 0),
+        "cache_misses": info.get("keyspace_misses", 0),
+        "memory_usage": info.get("used_memory_human", "0B"),
+        "connected_clients": info.get("connected_clients", 0)
     }
 
 if __name__ == "__main__":

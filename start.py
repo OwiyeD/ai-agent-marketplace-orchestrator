@@ -7,7 +7,7 @@ Initializes database with sample data and starts the application
 import asyncio
 import sys
 import os
-from database import SessionLocal, create_tables, Agent, Orchestration
+from src.orchastrator.config.database import SessionLocal, create_tables, Agent, Orchestration
 from sqlalchemy.orm import Session
 
 def init_sample_data():

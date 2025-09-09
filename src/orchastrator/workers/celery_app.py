@@ -64,6 +64,6 @@ celery_app.conf.update(
 celery_app.autodiscover_tasks(['tasks'])
 
 try:
-    import tasks
+    import src.orchastrator.workers.tasks as tasks
 except ImportError:
     pass
