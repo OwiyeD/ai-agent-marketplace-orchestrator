@@ -1,0 +1,229 @@
+# infrastructure/docker/docker-compose.yml - Complete development stack
+version: '3.8'
+
+services:
+  # Main orchestrator service
+  orchestrator:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile.dev
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/orchestrator_db
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_CACHE_URL=redis://redis-cache:6379/0
+      - ENABLE_METRICS=true
+      - DEBUG=true
+    volumes:
+      - ../../:/app
+      - /var/run/docker.sock:/var/run/docker.sock  # For Docker-in-Docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+  # Celery worker
+  celery-worker:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile.dev
+    command: poetry run celery -A src.orchestrator.workers.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/orchestrator_db
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_CACHE_URL=redis://redis-cache:6379/0
+    volumes:
+      - ../../:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  # Celery beat scheduler
+  celery-beat:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile.dev
+    command: poetry run celery -A src.orchestrator.workers.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/orchestrator_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ../../:/app
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: orchestrator_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orchestrator_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+  # Redis for Celery
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+  # Redis for caching
+  redis-cache:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_cache_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../monitoring/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+  # Jaeger for distributed tracing (optional)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "14250:14250"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+  # React frontend
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000/ws
+    volumes:
+      - ../../frontend:/app
+      - /app/node_modules
+    depends_on:
+      - orchestrator
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+  # nginx reverse proxy (for production-like setup)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl  # SSL certificates
+    depends_on:
+      - orchestrator
+      - frontend
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  redis_cache_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  orchestrator-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

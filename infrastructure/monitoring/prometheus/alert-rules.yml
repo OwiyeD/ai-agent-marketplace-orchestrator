@@ -1,0 +1,63 @@
+# infrastructure/monitoring/prometheus/alert-rules.yml
+groups:
+  - name: orchestrator.rules
+    rules:
+      # High error rate alert
+      - alert: HighErrorRate
+        expr: rate(orchestrator_tasks_total{status="failed"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High task failure rate detected"
+          description: "Task failure rate is {{ $value }} failures per second"
+
+      # High response time alert
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(orchestrator_task_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s"
+
+      # Database connection issues
+      - alert: DatabaseConnectionIssue
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database is not responding"
+
+      # Redis connection issues
+      - alert: RedisConnectionIssue
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache is not responding"
+
+      # Too many active orchestrations
+      - alert: TooManyActiveOrchestrations
+        expr: orchestrator_active_orchestrations > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many active orchestrations"
+          description: "{{ $value }} orchestrations are currently active"
+
+      # Low cache hit rate
+      - alert: LowCacheHitRate
+        expr: rate(cache_hits_total[5m]) / rate(cache_requests_total[5m]) < 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value | humanizePercentage }}"

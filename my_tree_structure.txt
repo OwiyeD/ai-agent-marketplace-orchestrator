@@ -1,0 +1,45 @@
+.
+├── docs
+│   ├── api
+│   ├── architecture
+│   ├── development
+│   └── user-guide
+├── frontend
+│   └── public
+│       └── src
+│           ├── components
+│           │   ├── AgentManager
+│           │   ├── Dashboard
+│           │   └── WorkflowVisualizer
+│           ├── services
+│           ├── types
+│           └── utils
+├── infrastructure
+│   ├── docker
+│   ├── kubernetes
+│   ├── monitoring
+│   │   ├── grafana
+│   │   │   ├── dashboards
+│   │   │   └── provisioning
+│   │   └── prometheus
+│   └── terraform
+├── migrations
+│   └── versions
+├── scripts
+├── src
+│   └── orchastrator
+│       ├── api
+│       │   └── v1
+│       ├── config
+│       ├── core
+│       ├── models
+│       ├── services
+│       ├── utils
+│       └── workers
+└── tests
+    ├── fixtures
+    ├── integration
+    ├── performance
+    └── unit
+
+43 directories

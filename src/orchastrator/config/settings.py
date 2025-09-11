@@ -1,44 +1,69 @@
+# src/orchestrator/config/settings.py
+
 from pydantic_settings import BaseSettings
 from typing import Optional
 import os
 
+
 class Settings(BaseSettings):
+    # -----------------------------
     # Database
+    # -----------------------------
     database_url: str
     database_pool_size: int = 5
     database_max_overflow: int = 10
-    
+
+    # -----------------------------
     # Redis
+    # -----------------------------
     redis_url: str
-    redis_cache_url: str
+    redis_cache_url: Optional[str] = None
     cache_ttl: int = 3600
-    
+
+    # -----------------------------
     # API
+    # -----------------------------
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_workers: int = 1
     debug: bool = False
-    
+
+    # -----------------------------
     # Security
+    # -----------------------------
     secret_key: str
     cors_origins: list[str] = ["http://localhost:3000"]
-    
-    # Monitoring
+
+    # -----------------------------
+    # Monitoring / Metrics
+    # -----------------------------
     enable_metrics: bool = True
     prometheus_port: int = 9090
     log_level: str = "INFO"
-    
+
+    # -----------------------------
     # LLM
+    # -----------------------------
     openai_api_key: Optional[str] = None
     llm_daily_budget: float = 50.0
     local_llm_endpoint: Optional[str] = None
-    
-    # Docker
+
+    # -----------------------------
+    # Docker / Sandbox
+    # -----------------------------
     docker_timeout: int = 30
     docker_memory_limit: str = "512m"
-    
+
+    # Extended sandbox options
+    sandbox_log_file_enabled: bool = True
+    sandbox_log_file_path: str = "logs/sandbox.log"
+    sandbox_log_buffer_limit: int = 1 * 1024 * 1024  # 1 MB
+    sandbox_container_timeout: int = 300  # seconds
+    monitoring_tick_interval: int = 5  # seconds
+
     class Config:
         env_file = ".env"
         case_sensitive = False
+
 
 settings = Settings()
